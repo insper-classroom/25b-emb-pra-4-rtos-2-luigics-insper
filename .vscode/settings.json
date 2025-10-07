@@ -43,6 +43,7 @@
         "format": "c",
         "gpio.h": "c",
         "i2c.h": "c",
-        "queue.h": "c"
+        "queue.h": "c",
+        "ssd1306.h": "c"
     }
 }
