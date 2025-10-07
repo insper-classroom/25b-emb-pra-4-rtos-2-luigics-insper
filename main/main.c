@@ -19,6 +19,9 @@ QueueHandle_t xQueueTime;
 SemaphoreHandle_t xSemaphoreTrigger;
 QueueHandle_t xQueueDistance;
 
+const int PIN_ECHO = 10;
+const int PIN_TRIGGER = 11;
+
 // == funcoes de inicializacao ===
 void btn_callback(uint gpio, uint32_t events) {
     if (events & GPIO_IRQ_EDGE_FALL) xQueueSendFromISR(xQueueBtn, &gpio, 0);
@@ -159,7 +162,8 @@ void double_pra_str(double num, char *str){
 void trigger_task(void *p){
     while(true){
         gpio_put(PIN_TRIGGER, 1);
-        sleep_us(10); gpio_put(PIN_TRIGGER, 0);
+        vTaskDelay(pdMS_TO_TICKS(10));
+        gpio_put(PIN_TRIGGER, 0);
         xSemaphoreGive(xSemaphoreTrigger);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
