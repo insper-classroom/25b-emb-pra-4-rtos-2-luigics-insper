@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 #include "pico/stdlib.h"
-
+#include "pins.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 #include "ssd1306.h"
@@ -18,14 +18,6 @@ QueueHandle_t xQueueTime;
 SemaphoreHandle_t xSemaphoreTrigger;
 QueueHandle_t xQueueDistance;
 
-const int PIN_ECHO = 10;
-const int PIN_TRIGGER = 11;
-const int BTN_PIN_R = 4;
-const int BTN_PIN_G = 5;
-const int BTN_PIN_B = 6;
-const int LED_PIN_R = 7;
-const int LED_PIN_G = 8;
-const int LED_PIN_B = 9;
 
 // == funcoes de inicializacao ===
 void btn_callback(uint gpio, uint32_t events) {
