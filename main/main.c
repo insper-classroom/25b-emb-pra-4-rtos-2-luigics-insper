@@ -17,9 +17,11 @@ QueueHandle_t xQueueBtn;
 QueueHandle_t xQueueTime;
 SemaphoreHandle_t xSemaphoreTrigger;
 QueueHandle_t xQueueDistance;
-volatile uint64_t subida, descida;
-volatile bool p_completo = false;
-volatile bool medindo = false;
+SemaphoreHandle_t xSemaphoreCompleto;
+SemaphoreHandle_t xSemaphoreMedindo;
+
+//volatile bool p_completo = false;
+//volatile bool medindo = false;
 
 // == funcoes de inicializacao ===
 void btn_callback(uint gpio, uint32_t events) {
@@ -111,16 +113,18 @@ void task_1(void *p) {
 
 void pin_callback(uint gpio, uint32_t events){
     if(gpio == PIN_ECHO){
+        uint64_t subida, descida;
         uint64_t agora = to_us_since_boot(get_absolute_time());
         if(events & GPIO_IRQ_EDGE_RISE){
-            if(!medindo){
+            if(xSemaphoreTakeFromISR(xSemaphoreMedindo,0) == pdFALSE){
                 subida = agora;
-                medindo = true;
+                //medindo = true;
+                xSemaphoreGiveFromISR(xSemaphoreMedindo,0);
             }
             //printf("subida: %llu ", subida);
            //xQueueSendFromISR(xQueueTime, &subida, 0);
         } else if(events & GPIO_IRQ_EDGE_FALL){
-            if(medindo){
+            if(xSemaphoreTakeFromISR(xSemaphoreMedindo,0) == pdTRUE){
                 descida = agora;
             }
             //descida = to_us_since_boot(get_absolute_time());
@@ -133,7 +137,7 @@ void pin_callback(uint gpio, uint32_t events){
                 }
                 xSemaphoreGiveFromISR(xSemaphoreTrigger,0);
             }
-            medindo = false;
+            //medindo = false;
             //printf("descida: %llu \n", descida);
 
         }
@@ -186,13 +190,15 @@ void double_pra_str(double num, char *str){
 
 void trigger_task(void *p){
     while(true){
-        p_completo = false;
+        xSemaphoreTake(xSemaphoreCompleto,0);
+        //p_completo = false;
         gpio_put(PIN_TRIGGER,0);
         sleep_us(2);
         gpio_put(PIN_TRIGGER, 1);
         sleep_us(10);
         gpio_put(PIN_TRIGGER, 0);
-        p_completo = true;
+        //p_completo = true;
+        xSemaphoreGive(xSemaphoreCompleto);
 //        xSemaphoreGive(xSemaphoreTrigger);
         vTaskDelay(pdMS_TO_TICKS(200));
     }
@@ -211,7 +217,8 @@ void echo_task(void *p){
                     // if(tempo <= 200){
                     //     printf("AAAAAAAAAAAAAAAAAAAAA\n");
                     //if(tempo_us > 200){
-                        if(p_completo == true){
+                        //if(p_completo == true){
+                        if(xSemaphoreTake(xSemaphoreCompleto,0) == pdTRUE){ 
                             double dist = ((double)tempo_us * 0.0343) / 2.0;
                             if(dist >= 2.0 && dist <= 400.0){
                                 printf("Dist: %lf cm\nTempo: %llu us\n", dist, tempo_us);
@@ -274,6 +281,8 @@ int main() {
     xQueueTime = xQueueCreate(2, sizeof(uint64_t));
     xQueueDistance = xQueueCreate(5, sizeof(double));
     xSemaphoreTrigger = xSemaphoreCreateBinary();
+    xSemaphoreCompleto = xSemaphoreCreateBinary();
+    xSemaphoreMedindo = xSemaphoreCreateBinary();
 
     xTaskCreate(task_1, "Task 1", 8192, NULL, 1, NULL);
     xTaskCreate(oled_task, "OLED Task", 2048, NULL, 1, NULL);
