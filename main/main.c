@@ -99,13 +99,13 @@ void task_1(void *p) {
                     // Handle other buttons if needed
                     break;
             }
-        } else {
-            ssd1306_clear(&disp);
-            ssd1306_show(&disp);
-            gpio_put(LED_PIN_R, 1);
-            gpio_put(LED_PIN_G, 1);
-            gpio_put(LED_PIN_B, 1);
-        }
+        } //else {
+          //  ssd1306_clear(&disp);
+          //  ssd1306_show(&disp);
+          //  gpio_put(LED_PIN_R, 1);
+          //  gpio_put(LED_PIN_G, 1);
+          //  gpio_put(LED_PIN_B, 1);
+        //}
     }
 }
 
@@ -129,9 +129,9 @@ void pin_callback(uint gpio, uint32_t events){
                 uint64_t t = descida - subida;
                 if(t >= 200 && t <= 30000){
                     xQueueSendFromISR(xQueueTime, &t, 0);
-                    xSemaphoreGiveFromISR(xSemaphoreTrigger,0);
                     
                 }
+                xSemaphoreGiveFromISR(xSemaphoreTrigger,0);
             }
             medindo = false;
             //printf("descida: %llu \n", descida);
@@ -214,11 +214,11 @@ void echo_task(void *p){
                         if(p_completo == true){
                             double dist = ((double)tempo_us * 0.0343) / 2.0;
                             if(dist >= 2.0 && dist <= 400.0){
-                                xQueueSend(xQueueDistance, &dist, 0);
                                 printf("Dist: %lf cm\nTempo: %llu us\n", dist, tempo_us);
                             } else{
                                 printf("Falha (dist: %lf)\n",dist);
                             }
+                            xQueueSend(xQueueDistance, &dist, 0);
                         }
                     //}
                 //}
