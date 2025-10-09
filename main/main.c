@@ -114,7 +114,7 @@ void task_1(void *p) {
 
 void pin_callback(uint gpio, uint32_t events){
     if(gpio == PIN_ECHO){
-        uint64_t subida, descida;
+        static uint64_t subida, descida;
         uint64_t agora = to_us_since_boot(get_absolute_time());
         if(events & GPIO_IRQ_EDGE_RISE){
             if(xSemaphoreTakeFromISR(xSemaphoreMedindo,0) == pdFALSE){
