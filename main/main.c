@@ -8,6 +8,7 @@
 #include "pins.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
+#include "hardware/timer.h"
 #include "ssd1306.h"
 
 // === Definições para SSD1306 ===
@@ -188,15 +189,18 @@ void double_pra_str(double num, char *str){
 }
 
 
+int64_t trigger_callback(alarm_id_t id, void *user_data) {
+    gpio_put(PIN_TRIGGER, 0);
+    return 0;
+}
+
 void trigger_task(void *p){
     while(true){
         xSemaphoreTake(xSemaphoreCompleto,0);
         //p_completo = false;
-        gpio_put(PIN_TRIGGER,0);
-        sleep_us(2);
+        //gpio_put(PIN_TRIGGER,0);
         gpio_put(PIN_TRIGGER, 1);
-        sleep_us(10);
-        gpio_put(PIN_TRIGGER, 0);
+        add_alarm_in_us(10, trigger_callback, NULL, true);
         //p_completo = true;
         xSemaphoreGive(xSemaphoreCompleto);
 //        xSemaphoreGive(xSemaphoreTrigger);
