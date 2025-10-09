@@ -17,6 +17,7 @@ QueueHandle_t xQueueBtn;
 QueueHandle_t xQueueTime;
 SemaphoreHandle_t xSemaphoreTrigger;
 QueueHandle_t xQueueDistance;
+volatile uint64_t subida, descida;
 
 
 // == funcoes de inicializacao ===
@@ -50,9 +51,9 @@ void btns_init(void) {
     gpio_set_dir(BTN_PIN_B, GPIO_IN);
     gpio_pull_up(BTN_PIN_B);
 
-    gpio_set_irq_enabled_with_callback(BTN_PIN_R, GPIO_IRQ_EDGE_FALL, true, &btn_callback);
-    gpio_set_irq_enabled(BTN_PIN_G, GPIO_IRQ_EDGE_FALL, true);
-    gpio_set_irq_enabled(BTN_PIN_B, GPIO_IRQ_EDGE_FALL, true);
+    // gpio_set_irq_enabled_with_callback(BTN_PIN_R, GPIO_IRQ_EDGE_FALL, true, &btn_callback);
+    // gpio_set_irq_enabled(BTN_PIN_G, GPIO_IRQ_EDGE_FALL, true);
+    // gpio_set_irq_enabled(BTN_PIN_B, GPIO_IRQ_EDGE_FALL, true);
 }
 
 void led_rgb_init(void) {
@@ -109,14 +110,25 @@ void task_1(void *p) {
 
 void pin_callback(uint gpio, uint32_t events){
     if(gpio == PIN_ECHO){
-        uint64_t time_us = to_us_since_boot(get_absolute_time());
-        xQueueSendFromISR(xQueueTime, &time_us, 0);
+        if(events & GPIO_IRQ_EDGE_RISE){
+            subida = to_us_since_boot(get_absolute_time());
+            //printf("subida 1: %llu \n", subida);
+           //xQueueSendFromISR(xQueueTime, &subida, 0);
+        } else if(events & GPIO_IRQ_EDGE_FALL){
+            descida = to_us_since_boot(get_absolute_time());
+            uint64_t t = descida - subida;
+            //printf("descida: %llu \n", descida);
+
+            xQueueSendFromISR(xQueueTime, &t, 0);
+        }
     }
 }
 
 void double_pra_str(double num, char *str){
     int inteiro = (int)num;
+    // printf("inteiro: %d\n",inteiro);
     int decimal = (int)((num - inteiro) * 100 + 0.5); //arredonda
+    // printf("decimal: %d\n",decimal);
 
     if(decimal >= 100){
         decimal = 0;
@@ -159,7 +171,7 @@ void double_pra_str(double num, char *str){
 void trigger_task(void *p){
     while(true){
         gpio_put(PIN_TRIGGER, 1);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(1);
         gpio_put(PIN_TRIGGER, 0);
         xSemaphoreGive(xSemaphoreTrigger);
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -167,15 +179,29 @@ void trigger_task(void *p){
 }
 
 void echo_task(void *p){
-    uint64_t t_subida, t_descida;
+    uint64_t t_descida;
     while(true){
-        if(xQueueReceive(xQueueTime, &t_subida, pdMS_TO_TICKS(100))){
-            if(xQueueReceive(xQueueTime, &t_descida, pdMS_TO_TICKS(50))){
-                double dur_pulso = (double)(t_descida - t_subida);
-                double dist = (dur_pulso * 0.0343) / 2.0;
-                xQueueSend(xQueueDistance, &dist, 0);
-            }
-        }
+        //if(xQueueReceive(xQueueTime, &t_subida, pdMS_TO_TICKS(100))){
+            //printf("t_subida: %d\n", t_subida);
+            if(xQueueReceive(xQueueTime, &t_descida, portMAX_DELAY) == pdTRUE){
+                //if(t_descida >= t_subida && t_subida > 0){
+                    //printf("t_descida: %llu\n", t_descida);
+                    //tempo = t_descida - t_subida;
+                    //printf("tempo: %llu\n",t_descida);
+                    // if(tempo <= 200){
+                    //     printf("AAAAAAAAAAAAAAAAAAAAA\n");
+                    if(t_descida > 200){
+                        double dist = ((double)t_descida * 0.000343) / 2.0;
+                        if(dist > 3){
+                            xQueueSend(xQueueDistance, &dist, 0);
+                        }
+                        printf("tempo: %lf\n",dist);
+                        printf("t_descida: %llu\n",t_descida);
+                    }
+                //}
+                //double dur_pulso = (double)(t_descida - t_subida);
+           }
+        //}
     }
 }
 
@@ -184,12 +210,15 @@ void oled_task(void *p){
     char dist_em_str[20];
     while(1){
         if(xSemaphoreTake(xSemaphoreTrigger, pdMS_TO_TICKS(500)) == pdTRUE){
-            if(xQueueReceive(xQueueDistance, &dist_cm, pdMS_TO_TICKS(100)) == pdTRUE){
+            if(xQueueReceive(xQueueDistance, &dist_cm, pdMS_TO_TICKS(500)) == pdTRUE){
                 double_pra_str(dist_cm, dist_em_str);
+                //printf("dist_cm: %c\n", dist_em_str);
                 if(dist_cm <= 100.0){ 
-                    gpio_put(LED_PIN_R, 1); gpio_put(LED_PIN_G, 0);
+                    gpio_put(LED_PIN_R, 1); 
+                    gpio_put(LED_PIN_G, 0);
                 } else {
-                    gpio_put(LED_PIN_R, 0); gpio_put(LED_PIN_G, 0);
+                    gpio_put(LED_PIN_R, 0); 
+                    gpio_put(LED_PIN_G, 0);
                 }
                 ssd1306_clear(&disp);
                 ssd1306_draw_string(&disp, 0, 16, 2, dist_em_str);
@@ -218,7 +247,7 @@ int main() {
     gpio_set_irq_enabled_with_callback(PIN_ECHO, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &pin_callback);
 
     xQueueBtn = xQueueCreate(32, sizeof(uint));
-    xQueueTime = xQueueCreate(10, sizeof(uint64_t));
+    xQueueTime = xQueueCreate(2, sizeof(uint64_t));
     xQueueDistance = xQueueCreate(5, sizeof(double));
     xSemaphoreTrigger = xSemaphoreCreateBinary();
 

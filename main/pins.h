@@ -8,8 +8,8 @@ enum {
     LED_PIN_R = 7,
     LED_PIN_G = 8,
     LED_PIN_B = 9,
-    PIN_ECHO = 10,
-    PIN_TRIGGER = 11
+    PIN_ECHO = 16,
+    PIN_TRIGGER = 17
 };
 
 #endif // PINS_H
