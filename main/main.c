@@ -176,8 +176,6 @@ void double_pra_str(double num, char *str){
 void trigger_task(void *p){
     while(true){
 
-        xQueueReset(xQueueTime);
-        xQueueReset(xQueueDistance);
         gpio_put(PIN_TRIGGER,0);
         sleep_us(2);
         gpio_put(PIN_TRIGGER, 1);
