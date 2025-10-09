@@ -18,7 +18,8 @@ QueueHandle_t xQueueTime;
 SemaphoreHandle_t xSemaphoreTrigger;
 QueueHandle_t xQueueDistance;
 volatile uint64_t subida, descida;
-
+volatile bool p_completo = false;
+volatile bool medindo = false;
 
 // == funcoes de inicializacao ===
 void btn_callback(uint gpio, uint32_t events) {
@@ -110,19 +111,29 @@ void task_1(void *p) {
 
 void pin_callback(uint gpio, uint32_t events){
     if(gpio == PIN_ECHO){
+        uint64_t agora = to_us_since_boot(get_absolute_time());
         if(events & GPIO_IRQ_EDGE_RISE){
-            subida = to_us_since_boot(get_absolute_time());
+            if(!medindo){
+                subida = agora;
+                medindo = true;
+            }
             //printf("subida: %llu ", subida);
            //xQueueSendFromISR(xQueueTime, &subida, 0);
         } else if(events & GPIO_IRQ_EDGE_FALL){
-            descida = to_us_since_boot(get_absolute_time());
+            if(medindo){
+                descida = agora;
+            }
+            //descida = to_us_since_boot(get_absolute_time());
             //printf("descida: %llu\n", descida);
             if(descida > subida){
                 uint64_t t = descida - subida;
-                if(t >= 200 && t <= 70000){
+                if(t >= 200 && t <= 30000){
                     xQueueSendFromISR(xQueueTime, &t, 0);
+                    xSemaphoreGiveFromISR(xSemaphoreTrigger,0);
+                    
                 }
             }
+            medindo = false;
             //printf("descida: %llu \n", descida);
 
         }
@@ -175,13 +186,14 @@ void double_pra_str(double num, char *str){
 
 void trigger_task(void *p){
     while(true){
-
+        p_completo = false;
         gpio_put(PIN_TRIGGER,0);
         sleep_us(2);
         gpio_put(PIN_TRIGGER, 1);
         sleep_us(10);
         gpio_put(PIN_TRIGGER, 0);
-        xSemaphoreGive(xSemaphoreTrigger);
+        p_completo = true;
+//        xSemaphoreGive(xSemaphoreTrigger);
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
@@ -199,12 +211,14 @@ void echo_task(void *p){
                     // if(tempo <= 200){
                     //     printf("AAAAAAAAAAAAAAAAAAAAA\n");
                     //if(tempo_us > 200){
-                        double dist = ((double)tempo_us * 0.0343) / 2.0;
-                        if(dist >= 2.0 && dist <= 400.0){
-                            xQueueSend(xQueueDistance, &dist, 0);
-                            printf("Dist: %lf cm\nTempo: %llu us\n", dist, tempo_us);
-                        } else{
-                            printf("Falha (dist: %lf)\n",dist);
+                        if(p_completo == true){
+                            double dist = ((double)tempo_us * 0.0343) / 2.0;
+                            if(dist >= 2.0 && dist <= 400.0){
+                                xQueueSend(xQueueDistance, &dist, 0);
+                                printf("Dist: %lf cm\nTempo: %llu us\n", dist, tempo_us);
+                            } else{
+                                printf("Falha (dist: %lf)\n",dist);
+                            }
                         }
                     //}
                 //}
