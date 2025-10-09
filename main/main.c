@@ -112,14 +112,19 @@ void pin_callback(uint gpio, uint32_t events){
     if(gpio == PIN_ECHO){
         if(events & GPIO_IRQ_EDGE_RISE){
             subida = to_us_since_boot(get_absolute_time());
-            //printf("subida 1: %llu \n", subida);
+            //printf("subida: %llu ", subida);
            //xQueueSendFromISR(xQueueTime, &subida, 0);
         } else if(events & GPIO_IRQ_EDGE_FALL){
             descida = to_us_since_boot(get_absolute_time());
-            uint64_t t = descida - subida;
+            //printf("descida: %llu\n", descida);
+            if(descida > subida){
+                uint64_t t = descida - subida;
+                if(t >= 200 && t <= 70000){
+                    xQueueSendFromISR(xQueueTime, &t, 0);
+                }
+            }
             //printf("descida: %llu \n", descida);
 
-            xQueueSendFromISR(xQueueTime, &t, 0);
         }
     }
 }
@@ -170,34 +175,40 @@ void double_pra_str(double num, char *str){
 
 void trigger_task(void *p){
     while(true){
+
+        xQueueReset(xQueueTime);
+        xQueueReset(xQueueDistance);
+        gpio_put(PIN_TRIGGER,0);
+        sleep_us(2);
         gpio_put(PIN_TRIGGER, 1);
-        vTaskDelay(1);
+        sleep_us(10);
         gpio_put(PIN_TRIGGER, 0);
         xSemaphoreGive(xSemaphoreTrigger);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
 void echo_task(void *p){
-    uint64_t t_descida;
+    uint64_t tempo_us;
     while(true){
         //if(xQueueReceive(xQueueTime, &t_subida, pdMS_TO_TICKS(100))){
             //printf("t_subida: %d\n", t_subida);
-            if(xQueueReceive(xQueueTime, &t_descida, portMAX_DELAY) == pdTRUE){
+            if(xQueueReceive(xQueueTime, &tempo_us, portMAX_DELAY) == pdTRUE){
                 //if(t_descida >= t_subida && t_subida > 0){
                     //printf("t_descida: %llu\n", t_descida);
                     //tempo = t_descida - t_subida;
                     //printf("tempo: %llu\n",t_descida);
                     // if(tempo <= 200){
                     //     printf("AAAAAAAAAAAAAAAAAAAAA\n");
-                    if(t_descida > 200){
-                        double dist = ((double)t_descida * 0.000343) / 2.0;
-                        if(dist > 3){
+                    //if(tempo_us > 200){
+                        double dist = ((double)tempo_us * 0.0343) / 2.0;
+                        if(dist >= 2.0 && dist <= 400.0){
                             xQueueSend(xQueueDistance, &dist, 0);
+                            printf("Dist: %lf cm\nTempo: %llu us\n", dist, tempo_us);
+                        } else{
+                            printf("Falha (dist: %lf)\n",dist);
                         }
-                        printf("tempo: %lf\n",dist);
-                        printf("t_descida: %llu\n",t_descida);
-                    }
+                    //}
                 //}
                 //double dur_pulso = (double)(t_descida - t_subida);
            }
@@ -242,6 +253,7 @@ int main() {
 
     gpio_init(PIN_TRIGGER);
     gpio_set_dir(PIN_TRIGGER, GPIO_OUT);
+    gpio_put(PIN_TRIGGER,0);
     gpio_init(PIN_ECHO);
     gpio_set_dir(PIN_ECHO, GPIO_IN);
     gpio_set_irq_enabled_with_callback(PIN_ECHO, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &pin_callback);
@@ -253,8 +265,8 @@ int main() {
 
     xTaskCreate(task_1, "Task 1", 8192, NULL, 1, NULL);
     xTaskCreate(oled_task, "OLED Task", 2048, NULL, 1, NULL);
-    xTaskCreate(trigger_task, "Trigger Task", 256, NULL, 1, NULL);
-    xTaskCreate(echo_task, "Echo Task", 256, NULL, 1, NULL);
+    xTaskCreate(trigger_task, "Trigger Task", 1024, NULL, 1, NULL);
+    xTaskCreate(echo_task, "Echo Task", 2048, NULL, 1, NULL);
 
     vTaskStartScheduler();
 
